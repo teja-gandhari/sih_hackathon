@@ -104,3 +104,95 @@ def test_full_financial_plan():
     assert plan.dscr_ratio > 1.5
     assert plan.cash_flow_5yr["projection_horizon_years"] == 5
 
+
+def test_case_1_micro_finance_scheme():
+    """CASE 1: Margin = ₹10,000 -> Project Cost = ₹1,00,000, Loan = ₹90,000, Micro Finance Scheme (6.5%, 36mo, 3mo morat)."""
+    res = FinancialCalculationEngine.structure_from_available_margin(
+        available_margin_capital=10000.0
+    )
+    assert res.eligible is True
+    assert res.available_margin_capital == 10000.0
+    assert res.total_feasible_project_cost == 100000.0
+    assert res.maximum_loan_amount == 90000.0
+    assert res.selected_scheme_tier == "Micro Finance Scheme"
+    assert res.scheme_code == "SCA_MICRO_FINANCE"
+    assert res.concessional_interest_rate_pct == 6.5
+    assert res.loan_tenure_months == 36
+    assert res.moratorium_months == 3
+    assert res.ineligibility_reason is None
+    assert len(res.quarterly_repayment_schedule) == 12
+    # First quarter is moratorium (principal = 0)
+    assert res.quarterly_repayment_schedule[0].is_moratorium is True
+    assert res.quarterly_repayment_schedule[0].principal_repayment == 0.0
+
+
+def test_case_2_term_loan_scheme_100k():
+    """CASE 2: Margin = ₹1,00,000 -> Project Cost = ₹10,00,000, Loan = ₹9,00,000, Term Loan Scheme (8%, 84mo, 6mo morat)."""
+    res = FinancialCalculationEngine.structure_from_available_margin(
+        available_margin_capital=100000.0
+    )
+    assert res.eligible is True
+    assert res.available_margin_capital == 100000.0
+    assert res.total_feasible_project_cost == 1000000.0
+    assert res.maximum_loan_amount == 900000.0
+    assert res.selected_scheme_tier == "Term Loan Scheme"
+    assert res.scheme_code == "SCA_TERM_LOAN"
+    assert res.concessional_interest_rate_pct == 8.0
+    assert res.loan_tenure_months == 84
+    assert res.moratorium_months == 6
+    assert res.ineligibility_reason is None
+    assert len(res.quarterly_repayment_schedule) == 28
+    # First 2 quarters are moratorium (principal = 0)
+    assert res.quarterly_repayment_schedule[0].is_moratorium is True
+    assert res.quarterly_repayment_schedule[1].is_moratorium is True
+    assert res.quarterly_repayment_schedule[2].is_moratorium is False
+
+
+def test_case_3_term_loan_scheme_boundary_500k():
+    """CASE 3: Margin = ₹5,00,000 -> Project Cost = ₹50,00,000, Loan = ₹45,00,000, Term Loan Scheme (8%, 84mo, 6mo morat)."""
+    res = FinancialCalculationEngine.structure_from_available_margin(
+        available_margin_capital=500000.0
+    )
+    assert res.eligible is True
+    assert res.available_margin_capital == 500000.0
+    assert res.total_feasible_project_cost == 5000000.0
+    assert res.maximum_loan_amount == 4500000.0
+    assert res.selected_scheme_tier == "Term Loan Scheme"
+    assert res.scheme_code == "SCA_TERM_LOAN"
+    assert res.concessional_interest_rate_pct == 8.0
+    assert res.loan_tenure_months == 84
+    assert res.moratorium_months == 6
+    assert res.ineligibility_reason is None
+    assert len(res.quarterly_repayment_schedule) == 28
+
+
+def test_case_4_ineligible_exceeds_ceiling_600k():
+    """CASE 4: Margin = ₹6,00,000 -> Project Cost = ₹60,00,000 -> Not eligible (eligible=False, clear reason)."""
+    res = FinancialCalculationEngine.structure_from_available_margin(
+        available_margin_capital=600000.0
+    )
+    assert res.eligible is False
+    assert res.available_margin_capital == 600000.0
+    assert res.total_feasible_project_cost == 6000000.0
+    assert res.maximum_loan_amount is None
+    assert res.selected_scheme_tier is None
+    assert res.scheme_code is None
+    assert res.concessional_interest_rate_pct is None
+    assert res.loan_tenure_months is None
+    assert res.moratorium_months is None
+    assert res.monthly_emi_amount is None
+    assert res.quarterly_installment_amount is None
+    assert res.quarterly_repayment_schedule == []
+    assert res.ineligibility_reason is not None
+    assert "exceeds" in res.ineligibility_reason.lower()
+
+
+def test_margin_validation_zero_or_negative():
+    """Verify margin <= 0 raises ValueError."""
+    with pytest.raises(ValueError):
+        FinancialCalculationEngine.structure_from_available_margin(available_margin_capital=0.0)
+    with pytest.raises(ValueError):
+        FinancialCalculationEngine.structure_from_available_margin(available_margin_capital=-5000.0)
+
+
+

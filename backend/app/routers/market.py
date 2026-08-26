@@ -5,10 +5,43 @@ from sqlalchemy import select
 
 from app.core.database import get_db
 from app.models.market import District, SubDistrict, Village, MarketData
-from app.schemas.market import DistrictRead, SubDistrictRead, VillageRead, MarketDataRead
+from app.schemas.market import (
+    DistrictRead,
+    SubDistrictRead,
+    VillageRead,
+    MarketDataRead,
+    MarketAnalysisRequest,
+    MarketAnalysisResponse
+)
 from app.services.market_service import MarketService
+from app.services.market_analysis_engine import HyperLocalMarketAnalysisEngine
 
 router = APIRouter(prefix="/market", tags=["Location & Hyper-Local Market Data"])
+
+
+@router.post("/analyze", response_model=MarketAnalysisResponse)
+async def analyze_hyper_local_market(
+    request: MarketAnalysisRequest,
+    db: AsyncSession = Depends(get_db)
+) -> Any:
+    """
+    Hyper-Local Market Demand, Competition & Business Viability Engine.
+    
+    Answers the core question:
+    'Can my local population and market support one more business of this type?'
+    
+    Analyzes:
+    - Village & reachable market population
+    - Existing competitors & population per competitor
+    - Projected population per business after proposed entry
+    - Market capacity & saturation percentage
+    - Explainable Opportunity Score (0 - 100) & Viability Recommendation
+    """
+    return await HyperLocalMarketAnalysisEngine.analyze_market_viability(
+        db=db,
+        request=request
+    )
+
 
 
 @router.get("/districts")

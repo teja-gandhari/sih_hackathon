@@ -11,12 +11,36 @@ from app.models.application import BusinessApplication, FinancialPlan
 from app.schemas.financial import (
     FinancialCalculateRequest,
     FinancialBreakdownResponse,
-    FinancialPlanRead
+    FinancialPlanRead,
+    SmartStructuringRequest,
+    SmartStructuringResponse
 )
 from app.services.financial_engine import FinancialCalculationEngine
 from app.routers.users import get_current_user
 
 router = APIRouter(prefix="/financial", tags=["Financial Engine"])
+
+
+@router.post("/smart-structure", response_model=SmartStructuringResponse)
+async def smart_financial_structuring_and_scheme_router(
+    request: SmartStructuringRequest
+) -> Any:
+    """
+    Module 2: Smart Financial Calculator & Scheme Router.
+    Takes Available Margin Capital (e.g. ₹1,00,000) and automatically outputs:
+    1. Feasible Project Cost (Margin / 10%)
+    2. Maximum Loan Amount (90% of Project Cost)
+    3. Scheme Auto-Selection (Micro Finance <= ₹1.40L @ 6.5% vs Term Loan <= ₹50.00L @ 8%)
+    4. Quarterly Repayment Schedule with Moratorium grace periods
+    """
+    return FinancialCalculationEngine.structure_from_available_margin(
+        available_margin_capital=request.available_margin_capital,
+        business_category=request.business_category or "dairy",
+        category=request.category,
+        is_rural=request.is_rural,
+        location_district=request.location_district or "Nalgonda"
+    )
+
 
 
 @router.post("/calculate", response_model=FinancialBreakdownResponse)

@@ -1,7 +1,11 @@
 import math
 from typing import Dict, Any, List
 from app.models.user import SocialCategoryEnum
-from app.schemas.financial import FinancialBreakdownResponse
+from app.schemas.financial import (
+    FinancialBreakdownResponse,
+    SmartStructuringResponse,
+    QuarterlyRepaymentEntry
+)
 
 
 class FinancialCalculationEngine:
@@ -312,4 +316,196 @@ class FinancialCalculationEngine:
             cash_flow_5yr=cash_flow,
             cost_breakdown=cost_breakdown
         )
+
+    @classmethod
+    def structure_from_available_margin(
+        cls,
+        available_margin_capital: float,
+        business_category: str = "dairy",
+        category: SocialCategoryEnum = SocialCategoryEnum.GENERAL,
+        is_rural: bool = True,
+        location_district: str = "Nalgonda"
+    ) -> SmartStructuringResponse:
+        """
+        Smart Financial Structuring & Scheme Router based on Available Margin Capital.
+        
+        Logic:
+        1. Total feasible Project Cost = Available Margin / 10% (10x Available Margin)
+        2. Maximum Loan Amount = 90% of Project Cost (9x Available Margin)
+        3. Scheme Auto-Selection:
+           - Logic A (Cost <= ₹1.40 Lakh): Micro Finance Scheme (6.5% interest, 3-yr tenure, 3-month moratorium, max ₹1.25L)
+           - Logic B (Cost > ₹1.40 Lakh & <= ₹50.00 Lakh): Term Loan Scheme (8% interest, 7-yr tenure, 6-month moratorium, max ₹45L)
+           - Logic C (Cost > ₹50.00 Lakh): Ineligible (returns eligible=False with clear explanation)
+        4. Generates exact Quarterly & Monthly repayment schedules factoring in Moratorium grace periods.
+        """
+        if available_margin_capital <= 0:
+            raise ValueError("Available margin capital must be greater than zero.")
+
+        # Step 1 & 2: Financial Structuring
+        total_project_cost = available_margin_capital / 0.10
+        raw_loan_eligibility = total_project_cost * 0.90
+
+        # Step 3: Scheme Auto-Selection
+        if total_project_cost <= 140000.0:
+            # 1. Micro Finance Scheme
+            eligible = True
+            scheme_tier = "Micro Finance Scheme"
+            scheme_code = "SCA_MICRO_FINANCE"
+            nodal_agency = "State Channelizing Agencies (SCAs) / NBCFDC / NSFDC / NSTFDC"
+            ineligibility_reason = None
+            concessional_rate = 6.5
+            loan_tenure_years = 3
+            loan_tenure_months = 36
+            total_quarters = 12
+            moratorium_months = 3
+            moratorium_quarters = 1
+            max_loan_amount = min(raw_loan_eligibility, 125000.0)
+            roadmap_summary = (
+                f"Your available margin capital of ₹{available_margin_capital:,.0f} qualifies you for the Micro Finance Scheme "
+                f"(Project Cost ₹{total_project_cost:,.0f}). The State Channelizing Agency provides a 90% concessional loan of "
+                f"₹{max_loan_amount:,.0f} at 6.5% per annum for 3 years, with a 3-month moratorium grace period."
+            )
+        elif total_project_cost <= 5000000.0:
+            # 2. Term Loan Scheme
+            eligible = True
+            scheme_tier = "Term Loan Scheme"
+            scheme_code = "SCA_TERM_LOAN"
+            nodal_agency = "State Channelizing Agencies (SCAs) / NBCFDC / NSFDC / NSTFDC"
+            ineligibility_reason = None
+            concessional_rate = 8.0
+            loan_tenure_years = 7
+            loan_tenure_months = 84
+            total_quarters = 28
+            moratorium_months = 6
+            moratorium_quarters = 2
+            max_loan_amount = min(raw_loan_eligibility, 4500000.0)
+            roadmap_summary = (
+                f"Your available margin capital of ₹{available_margin_capital:,.0f} qualifies you for the Term Loan Scheme "
+                f"(Project Cost ₹{total_project_cost:,.0f}). The State Channelizing Agency provides a 90% concessional loan of "
+                f"₹{max_loan_amount:,.0f} at 8.0% per annum for 7 years, with a 6-month moratorium grace period."
+            )
+        else:
+            # 3. Not Eligible (Project Cost > ₹50.00 Lakhs)
+            ineligibility_msg = (
+                f"Total feasible project cost ₹{total_project_cost:,.0f} exceeds the maximum limit of ₹50,00,000 "
+                "supported under State Channelizing Agency schemes."
+            )
+            roadmap_msg = (
+                f"With available margin capital of ₹{available_margin_capital:,.0f}, the calculated project cost is "
+                f"₹{total_project_cost:,.0f}. This exceeds the ₹50.00 Lakh ceiling for State Channelizing Agency concessional schemes. "
+                "Beneficiaries requiring funding above ₹50 Lakhs should explore commercial bank MSME / CGTMSE programs or scale down the proposed unit."
+            )
+            return SmartStructuringResponse(
+                eligible=False,
+                selected_scheme_tier=None,
+                scheme_code=None,
+                nodal_agency=None,
+                ineligibility_reason=ineligibility_msg,
+                available_margin_capital=round(available_margin_capital, 2),
+                margin_percentage=10.0,
+                total_feasible_project_cost=round(total_project_cost, 2),
+                maximum_loan_amount=None,
+                concessional_interest_rate_pct=None,
+                loan_tenure_years=None,
+                loan_tenure_months=None,
+                moratorium_months=None,
+                monthly_emi_amount=None,
+                quarterly_installment_amount=None,
+                quarterly_repayment_schedule=[],
+                working_capital_buffer_recommended=None,
+                operational_cost_guidance=None,
+                financial_roadmap_summary=roadmap_msg
+            )
+
+        # Step 4: Repayment Calculation with Moratorium
+        active_quarters = total_quarters - moratorium_quarters
+        active_months = loan_tenure_months - moratorium_months
+
+        # Quarterly rate
+        r_q = (concessional_rate / 4.0) / 100.0
+        if r_q > 0 and active_quarters > 0:
+            quarterly_installment = (max_loan_amount * r_q * math.pow(1 + r_q, active_quarters)) / (
+                math.pow(1 + r_q, active_quarters) - 1
+            )
+        else:
+            quarterly_installment = max_loan_amount / max(active_quarters, 1)
+
+        # Monthly EMI during active repayment
+        r_m = (concessional_rate / 12.0) / 100.0
+        if r_m > 0 and active_months > 0:
+            monthly_emi = (max_loan_amount * r_m * math.pow(1 + r_m, active_months)) / (
+                math.pow(1 + r_m, active_months) - 1
+            )
+        else:
+            monthly_emi = max_loan_amount / max(active_months, 1)
+
+        # Build Quarterly Amortization Schedule
+        schedule: List[QuarterlyRepaymentEntry] = []
+        balance = max_loan_amount
+
+        for q in range(1, total_quarters + 1):
+            is_moratorium = (q <= moratorium_quarters)
+            interest_due = round(balance * r_q, 2)
+
+            if is_moratorium:
+                principal_repaid = 0.0
+                installment = interest_due
+                closing = balance
+            else:
+                principal_repaid = min(balance, round(quarterly_installment - interest_due, 2))
+                closing = max(0.0, round(balance - principal_repaid, 2))
+                installment = round(principal_repaid + interest_due, 2)
+                balance = closing
+
+            schedule.append(
+                QuarterlyRepaymentEntry(
+                    quarter_number=q,
+                    is_moratorium=is_moratorium,
+                    principal_repayment=principal_repaid,
+                    interest_payment=interest_due,
+                    total_installment=installment,
+                    closing_balance=closing
+                )
+            )
+
+        # Step 5: Working Capital Guidance
+        wc_buffer_recommended = round(total_project_cost * 0.20, 2)
+        capex_allocation = round(total_project_cost * 0.80, 2)
+
+        operational_cost_guidance = {
+            "suggested_capex_allocation": capex_allocation,
+            "suggested_working_capital_buffer": wc_buffer_recommended,
+            "moratorium_benefit_explanation": (
+                f"During the {moratorium_months}-month moratorium ({moratorium_quarters} quarter{'s' if moratorium_quarters > 1 else ''}), "
+                "principal repayment is deferred (₹0 principal). Simple interest accrues and is serviced quarterly to establish production, "
+                "secure market linkage, and build cash reserves before full amortization begins."
+            ),
+            "interest_accrual_policy": f"Simple interest of {concessional_rate}% p.a. accrues on the sanctioned loan balance during moratorium.",
+            "repayment_frequency": "Quarterly installments with optional monthly pacing",
+            "statutory_margin_fraction": "10% beneficiary equity contribution required"
+        }
+
+        return SmartStructuringResponse(
+            eligible=True,
+            selected_scheme_tier=scheme_tier,
+            scheme_code=scheme_code,
+            nodal_agency=nodal_agency,
+            ineligibility_reason=None,
+            available_margin_capital=round(available_margin_capital, 2),
+            margin_percentage=10.0,
+            total_feasible_project_cost=round(total_project_cost, 2),
+            maximum_loan_amount=round(max_loan_amount, 2),
+            concessional_interest_rate_pct=concessional_rate,
+            loan_tenure_years=loan_tenure_years,
+            loan_tenure_months=loan_tenure_months,
+            moratorium_months=moratorium_months,
+            monthly_emi_amount=round(monthly_emi, 2),
+            quarterly_installment_amount=round(quarterly_installment, 2),
+            quarterly_repayment_schedule=schedule,
+            working_capital_buffer_recommended=wc_buffer_recommended,
+            operational_cost_guidance=operational_cost_guidance,
+            financial_roadmap_summary=roadmap_summary
+        )
+
+
 

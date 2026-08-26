@@ -23,7 +23,9 @@ from app.routers import (
     schemes,
     market,
     analysis,
-    advisory
+    feasibility,
+    advisory,
+    reports
 )
 from app.seeds.schemes import seed_sectors_and_schemes
 from app.seeds.market_data import seed_market_data
@@ -34,11 +36,12 @@ logger = logging.getLogger("ruralbiz_app")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifespan event: create tables and seed default benchmark data on startup."""
+    # Initialize DB Tables on Startup
     logger.info("Initializing database tables...")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    
+
+    # Seed Initial Schemes and Market Benchmarks
     logger.info("Seeding initial benchmark data...")
     try:
         await seed_sectors_and_schemes()
@@ -54,7 +57,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
-    description="AI-Driven Hyper-Local Business Advisory and Financial Feasibility Platform for Rural Entrepreneurs.",
+    description="Backend API for RuralBiz AI - Smart Financial Structuring & Hyper-Local Business Advisory Assistant",
     lifespan=lifespan
 )
 
@@ -67,14 +70,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount API Routers
+# Mount API Routers (Standard /api/v1 prefix and root aliases)
 app.include_router(users.router, prefix=settings.API_V1_STR)
 app.include_router(businesses.router, prefix=settings.API_V1_STR)
 app.include_router(financial.router, prefix=settings.API_V1_STR)
 app.include_router(schemes.router, prefix=settings.API_V1_STR)
 app.include_router(market.router, prefix=settings.API_V1_STR)
 app.include_router(analysis.router, prefix=settings.API_V1_STR)
+app.include_router(feasibility.router, prefix=settings.API_V1_STR)
 app.include_router(advisory.router, prefix=settings.API_V1_STR)
+app.include_router(reports.router, prefix=settings.API_V1_STR)
+
+# Direct root-level aliases for SIH endpoints (/financial/smart-structure, /market/analyze, /feasibility/analyze, /advisory/chat, /schemes, etc.)
+app.include_router(financial.router)
+app.include_router(market.router)
+app.include_router(schemes.router)
+app.include_router(analysis.router)
+app.include_router(feasibility.router)
+app.include_router(advisory.router)
+
+
 
 
 @app.get("/", tags=["Health"])

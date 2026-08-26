@@ -75,3 +75,94 @@ class MarketDataCreate(BaseModel):
     data_confidence_level: str = "moderate_proxy"
     notes: Optional[str] = None
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Hyper-Local Market Demand, Competition and Business Viability Schemas
+# ─────────────────────────────────────────────────────────────────────────────
+
+class LocationCoordinates(BaseModel):
+    latitude: float
+    longitude: float
+
+
+class LocationDetails(BaseModel):
+    village: str
+    block: Optional[str] = None
+    district: str
+    state: str = "Telangana"
+    coordinates: Optional[LocationCoordinates] = None
+
+
+class PopulationAnalysisResult(BaseModel):
+    village_population: Optional[int] = None
+    reachable_population: Optional[int] = None
+    population_source: str
+    is_estimated: bool = False
+    retrieved_at: Optional[datetime] = None
+
+
+class CompetitionAnalysisResult(BaseModel):
+    existing_competitor_count: int
+    competitor_names: List[str] = []
+    competition_level: str  # "LOW", "MODERATE", "HIGH"
+    competitor_source: str  # "OpenStreetMap Overpass API", "Local Registry", "Seeded Demo Data"
+    population_per_existing_competitor: Optional[float] = None
+    projected_population_per_business: Optional[float] = None
+
+
+class MarketCapacityAnalysisResult(BaseModel):
+    recommended_population_per_business: float
+    estimated_market_capacity: int
+    existing_businesses: int
+    capacity_gap: int
+    market_saturation_percentage: float
+
+
+class MarketOpportunityResult(BaseModel):
+    score: float  # 0 to 100
+    classification: str  # "HIGH_OPPORTUNITY", "MODERATE_OPPORTUNITY", "LOW_OPPORTUNITY", "HIGH_SATURATION_HIGH_RISK"
+    demand_capacity_score: float
+    competition_gap_score: float
+    reachable_population_score: float
+    market_reach_score: float
+    reasoning: List[str] = []
+
+
+class MarketRecommendationResult(BaseModel):
+    should_proceed: bool
+    recommendation_level: str  # "PROCEED", "REVIEW", "HIGH_RISK"
+    summary: str
+    key_reasons: List[str] = []
+
+
+class DataQualityResult(BaseModel):
+    confidence: str  # "HIGH", "MEDIUM", "LOW"
+    sources: List[str] = []
+    limitations: List[str] = []
+
+
+class MarketAnalysisRequest(BaseModel):
+    village: Optional[str] = "Village A"
+    block: Optional[str] = None
+    district: str = "Nalgonda"
+    state: str = "Telangana"
+    business_category: str = "kirana"  # kirana, dairy, food_processing, retail, textiles, etc.
+    business_type_id: Optional[str] = None
+    radius_km: float = 5.0
+    village_population: Optional[int] = None  # Optional user override/fallback
+
+
+class MarketAnalysisResponse(BaseModel):
+    location: LocationDetails
+    business_category: str
+    analysis_radius_km: float
+    population_analysis: PopulationAnalysisResult
+    competition_analysis: CompetitionAnalysisResult
+    market_capacity_analysis: MarketCapacityAnalysisResult
+    market_opportunity: MarketOpportunityResult
+    recommendation: MarketRecommendationResult
+    data_quality: DataQualityResult
+
+    model_config = ConfigDict(from_attributes=True)
+
+
