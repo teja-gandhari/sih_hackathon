@@ -1,0 +1,24 @@
+# Secrets
+.env
+.env.*
+
+# Python
+__pycache__/
+*.pyc
+
+# Virtual environment
+.venv/
+venv/
+
+# Testing
+.pytest_cache/
+
+# Database
+*.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
