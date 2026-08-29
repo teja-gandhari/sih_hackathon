@@ -11,6 +11,56 @@ class SchemeEligibilityEngine:
 
     SCHEMES_DATABASE = [
         {
+            "scheme_code": "SCA_MICRO_FINANCE",
+            "scheme_name": "State Channelizing Agency - Micro Finance Scheme",
+            "nodal_agency": "State Channelizing Agencies (SCAs) / NBCFDC / NSFDC",
+            "min_cost": 10000.0,
+            "max_cost": 140000.0,
+            "eligible_sectors": ["dairy", "agriculture", "food_processing", "retail", "textiles", "handicrafts", "services"],
+            "eligible_categories": ["general", "obc", "sc", "st", "minority", "women_entrepreneur"],
+            "min_age": 18,
+            "general_rural_subsidy": 0.0,
+            "general_urban_subsidy": 0.0,
+            "special_rural_subsidy": 0.0,
+            "special_urban_subsidy": 0.0,
+            "max_subsidy_cap": 0.0,
+            "general_margin_pct": 10.0,
+            "special_margin_pct": 10.0,
+            "interest_rate": 6.5,
+            "tenure_months": 36,
+            "moratorium_months": 3,
+            "benefits": [
+                "Provides 90% concessional loan up to ₹1.25 Lakh with only 10% margin contribution",
+                "Concessional interest rate of 6.5% p.a. for rural micro-entrepreneurs",
+                "3-year repayment tenure with a 3-month moratorium grace period"
+            ]
+        },
+        {
+            "scheme_code": "SCA_TERM_LOAN",
+            "scheme_name": "State Channelizing Agency - Term Loan Scheme",
+            "nodal_agency": "State Channelizing Agencies (SCAs) / NBCFDC / NSFDC",
+            "min_cost": 140001.0,
+            "max_cost": 5000000.0,
+            "eligible_sectors": ["dairy", "agriculture", "food_processing", "retail", "textiles", "handicrafts", "services"],
+            "eligible_categories": ["general", "obc", "sc", "st", "minority", "women_entrepreneur"],
+            "min_age": 18,
+            "general_rural_subsidy": 0.0,
+            "general_urban_subsidy": 0.0,
+            "special_rural_subsidy": 0.0,
+            "special_urban_subsidy": 0.0,
+            "max_subsidy_cap": 0.0,
+            "general_margin_pct": 10.0,
+            "special_margin_pct": 10.0,
+            "interest_rate": 8.0,
+            "tenure_months": 84,
+            "moratorium_months": 6,
+            "benefits": [
+                "Provides 90% concessional loan up to ₹45 Lakhs with 10% margin contribution",
+                "Concessional interest rate of 8.0% p.a. for enterprise establishment",
+                "7-year repayment tenure with a 6-month moratorium grace period"
+            ]
+        },
+        {
             "scheme_code": "PMEGP",
             "scheme_name": "Prime Minister's Employment Generation Programme (PMEGP)",
             "nodal_agency": "KVIC / Ministry of MSME",
@@ -140,12 +190,13 @@ class SchemeEligibilityEngine:
         """
         Matches and ranks all eligible government schemes for the given profile and business.
         """
-        is_special = category in [
-            SocialCategoryEnum.SC,
-            SocialCategoryEnum.ST,
-            SocialCategoryEnum.OBC,
-            SocialCategoryEnum.WOMEN_ENTREPRENEUR,
-            SocialCategoryEnum.MINORITY
+        cat_val = category.value if hasattr(category, "value") else str(category).lower()
+        is_special = cat_val in [
+            "sc", "st", "obc", "women_entrepreneur", "minority", "women",
+            getattr(SocialCategoryEnum.SC, "value", "sc"),
+            getattr(SocialCategoryEnum.ST, "value", "st"),
+            getattr(SocialCategoryEnum.OBC, "value", "obc"),
+            getattr(SocialCategoryEnum.WOMEN_ENTREPRENEUR, "value", "women_entrepreneur")
         ]
 
         matched_results = []
@@ -165,9 +216,10 @@ class SchemeEligibilityEngine:
                 reasons.append(f"Minimum age required is {s['min_age']} years")
 
             # Category Check (e.g. Stand-Up India restricted to SC/ST/Women)
-            if category.value not in s["eligible_categories"]:
+            if cat_val not in s["eligible_categories"]:
                 is_eligible = False
                 reasons.append(f"Reserved exclusively for {', '.join(s['eligible_categories'])}")
+
 
             # Cost Check
             if project_cost < s["min_cost"] or project_cost > s["max_cost"]:

@@ -1,10 +1,12 @@
-"""
+r"""
 RuralBiz AI — Full Flow Integration Test (Standalone, Human-Readable Output)
 
 Flow:
   Register / Login
       ↓
   Get Business Types + Location IDs
+      ↓
+  Smart Financial Structuring (10% Margin -> 90% Loan & Scheme Auto-Selection)
       ↓
   Create Business Application
       ↓
@@ -14,7 +16,7 @@ Flow:
       ↓
   Get Market Data
       ↓
-  Evaluate Feasibility
+  Evaluate Feasibility (Module 1: 6-Pillar Hyper-Local Strategy)
       ↓
   AI Advisory (Telugu + Hindi + English)
       ↓
@@ -169,6 +171,30 @@ async def run_flow():
             print(f"    → {d['district_name']} ({d['state_name']}) — Population: {pop_str}")
         assert res.status_code == 200
 
+        # ── Step 6.5: Module 2 Smart Financial Structuring & Scheme Router ───
+        divider("STEP 6.5 · Smart Financial Structuring (10% Margin Logic)")
+        res_struct = await client.post("/api/v1/financial/smart-structure", json={
+            "available_margin_capital": 100000.0,
+            "business_category": "dairy",
+            "is_rural": True
+        }, headers=headers)
+        print(status(res_struct.status_code))
+        st_data = res_struct.json()
+        print(f"  Available Margin:       {rupees(st_data['available_margin_capital'])} ({st_data['margin_percentage']}%)")
+        print(f"  Total Project Cost:     {rupees(st_data['total_feasible_project_cost'])} (Margin / 10%)")
+        print(f"  Max Loan Amount:        {rupees(st_data['maximum_loan_amount'])} (90% of Cost)")
+        print(f"  Selected Scheme Tier:   {st_data['selected_scheme_tier']} ({st_data['scheme_code']})")
+        print(f"  Nodal Agency:           {st_data['nodal_agency']}")
+        print(f"  Concessional Rate:      {st_data['concessional_interest_rate_pct']}% p.a.")
+        print(f"  Tenure & Moratorium:    {st_data['loan_tenure_years']} Years ({st_data['loan_tenure_months']} mo) with {st_data['moratorium_months']}-Month Moratorium")
+        print(f"  Monthly EMI:            {rupees(st_data['monthly_emi_amount'])}/mo")
+        print(f"  Quarterly Installment:  {rupees(st_data['quarterly_installment_amount'])}/quarter")
+        print(f"  Sample Schedule (Q1-Q4):")
+        for q_entry in st_data['quarterly_repayment_schedule'][:4]:
+            morat_label = " [MORATORIUM GRACE]" if q_entry['is_moratorium'] else ""
+            print(f"    Quarter {q_entry['quarter_number']}: Principal={rupees(q_entry['principal_repayment'])}, Interest={rupees(q_entry['interest_payment'])}, Balance={rupees(q_entry['closing_balance'])}{morat_label}")
+        assert res_struct.status_code == 200
+
         # ── Step 7: Create Business Application ───────────────────────────────
         divider("STEP 7 · Create Business Application")
         app_payload = {
@@ -244,6 +270,27 @@ async def run_flow():
         print(f"  Data Confidence:        {market.get('data_confidence_level', 'N/A')}")
         assert res.status_code == 200
 
+        # ── Step 10.5: Hyper-Local Market Demand & Viability Engine ───────────
+        divider("STEP 10.5 · Hyper-Local Market Demand & Viability Engine (/market/analyze)")
+        res_mkt = await client.post("/api/v1/market/analyze", json={
+            "village": "Village A",
+            "district": "Nalgonda",
+            "business_category": "kirana",
+            "radius_km": 5.0
+        }, headers=headers)
+        print(status(res_mkt.status_code))
+        mkt_data = res_mkt.json()
+        print(f"  Location:               {mkt_data['location']['village']}, {mkt_data['location']['district']}")
+        print(f"  Category Analyzed:      {mkt_data['business_category']}")
+        print(f"  Reachable Population:   {mkt_data['population_analysis']['reachable_population']:,} (Source: {mkt_data['population_analysis']['population_source']})")
+        print(f"  Existing Competitors:   {mkt_data['competition_analysis']['existing_competitor_count']} (Level: {mkt_data['competition_analysis']['competition_level']})")
+        print(f"  Pop per Competitor:     {mkt_data['competition_analysis']['population_per_existing_competitor']:.0f} → Projected after new shop: {mkt_data['competition_analysis']['projected_population_per_business']:.0f}")
+        print(f"  Market Capacity:        {mkt_data['market_capacity_analysis']['estimated_market_capacity']} units (Saturation: {mkt_data['market_capacity_analysis']['market_saturation_percentage']}%)")
+        print(f"  Opportunity Score:      {mkt_data['market_opportunity']['score']}/100 ({mkt_data['market_opportunity']['classification']})")
+        print(f"  Recommendation:         {mkt_data['recommendation']['recommendation_level']} (Proceed: {'Yes' if mkt_data['recommendation']['should_proceed'] else 'No'})")
+        print(f"  Summary:                {mkt_data['recommendation']['summary']}")
+        assert res_mkt.status_code == 200
+
         # ── Step 11: Evaluate Feasibility ─────────────────────────────────────
         divider("STEP 11 · Evaluate Feasibility")
         res = await client.post(f"/api/v1/analysis/evaluate/{app_id}", headers=headers)
@@ -272,9 +319,32 @@ async def run_flow():
                         print(f"    [{k.upper()}] {item}")
         if ev.get("key_recommendations"):
             print(f"\n  💡 Recommendations:")
-            for rec in ev["key_recommendations"]:
-                print(f"    → {rec}")
+            for r in ev["key_recommendations"]:
+                print(f"    → {r}")
         assert res.status_code == 200
+
+        # ── Step 11.5: Unified Feasibility Engine ─────────────────────────────
+        divider("STEP 11.5 · Unified Feasibility Engine (/feasibility/analyze)")
+        res_uf = await client.post("/api/v1/feasibility/analyze", json={
+            "application_id": app_id,
+            "business_category": "dairy",
+            "available_margin_capital": 50000.0,
+            "village": "Miryalaguda",
+            "district": "Nalgonda",
+            "state": "Telangana",
+            "category": "obc",
+            "is_rural": True,
+            "radius_km": 5.0
+        }, headers=headers)
+        print(status(res_uf.status_code))
+        uf_data = res_uf.json()
+        print(f"  Overall Score:          {uf_data['overall_feasibility_score']}/100 ({uf_data['classification']})")
+        print(f"  Financial Score (40%):  {uf_data['financial_score']}/100")
+        print(f"  Market Score (40%):     {uf_data['market_score']}/100")
+        print(f"  Scheme Score (10%):     {uf_data['scheme_score']}/100")
+        print(f"  Risk Score (10%):       {uf_data['risk_score']}/100")
+        print(f"  Deterministic Summary:  {uf_data['deterministic_explanation']}")
+        assert res_uf.status_code == 200
 
         # ── Step 12: AI Advisory — Telugu ─────────────────────────────────────
         divider("STEP 12 · AI Advisory — Telugu (తెలుగు)")

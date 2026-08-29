@@ -251,3 +251,261 @@ Please return a JSON response with:
             swot=swot
         )
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # AI Business Advisor Chat (POST /api/v1/advisory/chat)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    CHAT_SYSTEM_PROMPT = (
+        "RuralBiz AI is a multilingual rural micro-entrepreneurship business advisor. "
+        "Provide practical, simple, clear, non-technical advice based only on the structured analysis provided. "
+        "Do not fabricate data or guarantee business success. "
+        "Clearly distinguish calculated facts from recommendations. "
+        "If data is unavailable, explicitly state the limitation. "
+        "All financial numbers, population data, competitor counts, and scheme eligibility "
+        "come from the backend calculations — never invent or modify them. "
+        "You only explain, advise, recommend and suggest strategies."
+    )
+
+    @classmethod
+    async def build_advisory_context(
+        cls,
+        db: Any,
+        request: Any,
+    ) -> "AdvisoryContextResponse":
+        """
+        Gathers real grounded data from the Unified Feasibility Engine,
+        Financial Engine, Scheme Router, and Market Engine.
+        Returns a structured context for AI or frontend inspection.
+        """
+        from app.schemas.feasibility import (
+            FeasibilityAnalyzeRequest,
+            AdvisoryContextResponse,
+        )
+        from app.services.feasibility_engine import FeasibilityScoringEngine
+
+        # Build a FeasibilityAnalyzeRequest from the chat request
+        feas_req = FeasibilityAnalyzeRequest(
+            application_id=getattr(request, "application_id", None),
+            business_category=getattr(request, "business_category", "dairy"),
+            available_margin_capital=getattr(request, "available_margin_capital", 50000.0),
+            village=getattr(request, "village", "Village A"),
+            district=getattr(request, "district", "Nalgonda"),
+            state=getattr(request, "state", "Telangana"),
+            category=getattr(request, "category", "obc"),
+            is_rural=getattr(request, "is_rural", True),
+            radius_km=getattr(request, "radius_km", 5.0),
+        )
+
+        feas_result = await FeasibilityScoringEngine.analyze_unified_feasibility(
+            db=db,
+            request=feas_req,
+        )
+
+        fin = feas_result.financial_summary or {}
+        mkt = feas_result.market_summary or {}
+        sch = feas_result.scheme_summary or {}
+
+        return AdvisoryContextResponse(
+            business_category=getattr(request, "business_category", "dairy") or "dairy",
+            village=getattr(request, "village", "Village A") or "Village A",
+            district=getattr(request, "district", "Nalgonda") or "Nalgonda",
+            state=getattr(request, "state", "Telangana") or "Telangana",
+            available_margin_capital=float(getattr(request, "available_margin_capital", 50000.0) or 50000.0),
+            total_project_cost=fin.get("total_project_cost", 0.0),
+            loan_amount=fin.get("total_project_cost", 0.0) * 0.90,
+            selected_scheme=sch.get("matched_scheme_name", "PMEGP"),
+            interest_rate=6.5 if fin.get("total_project_cost", 0) <= 140000.0 else 8.5,
+            monthly_emi=fin.get("monthly_emi", 0.0),
+            repayment_tenure_months=36 if fin.get("total_project_cost", 0) <= 140000.0 else 60,
+            market_population=mkt.get("village_population"),
+            reachable_population=mkt.get("village_population"),
+            competitor_count=mkt.get("existing_competitors", 0),
+            competition_level=mkt.get("competition_level", "LOW"),
+            market_saturation_pct=mkt.get("market_saturation_percentage", 0.0),
+            market_opportunity_score=feas_result.market_score,
+            feasibility_score=feas_result.overall_feasibility_score,
+            feasibility_classification=feas_result.classification,
+            financial_strengths=feas_result.strengths,
+            financial_risks=feas_result.key_risks,
+            market_opportunities=feas_result.opportunities,
+            market_risks=feas_result.key_risks,
+            dscr_ratio=fin.get("dscr_ratio", 0.0),
+            roi_percentage=fin.get("roi_percentage", 0.0),
+            break_even_months=fin.get("break_even_months", 0.0),
+            monthly_net_profit=fin.get("monthly_net_profit", 0.0),
+        )
+
+    @classmethod
+    async def generate_chat_advisory(
+        cls,
+        db: Any,
+        request: Any,
+    ) -> "AdvisoryChatResponse":
+        """
+        Main entry point for POST /api/v1/advisory/chat.
+        Gathers grounded context, builds a prompt, calls Gemini (or falls back),
+        and returns a structured chat response.
+        """
+        from app.schemas.feasibility import (
+            AdvisoryChatResponse,
+            AdvisoryContextUsed,
+        )
+
+        question = request.question
+        lang = (request.language or "en").lower()
+        lang_names = {"te": "Telugu (తెలుగు)", "hi": "Hindi (हिंदी)", "en": "English"}
+        lang_name = lang_names.get(lang, "English")
+
+        # 1. Build grounded context from real backend engines
+        try:
+            context = await cls.build_advisory_context(db=db, request=request)
+            context_used = AdvisoryContextUsed(financial=True, market=True, feasibility=True)
+        except Exception as e:
+            logger.error(f"Failed to build advisory context: {e}")
+            return AdvisoryChatResponse(
+                answer=(
+                    "I'm sorry, I could not retrieve your business analysis data at this time. "
+                    "Please ensure your application details are correctly submitted and try again."
+                ),
+                language=lang,
+                context_used=AdvisoryContextUsed(),
+                context_snapshot=None,
+            )
+
+        # 2. Build the grounded AI prompt
+        prompt = cls._build_chat_prompt(question, lang_name, context)
+
+        # 3. Try Gemini API
+        api_key = settings.GEMINI_API_KEY or os.getenv("GEMINI_API_KEY")
+        if api_key and api_key not in ("", "your_gemini_api_key_here"):
+            try:
+                import google.generativeai as genai
+                genai.configure(api_key=api_key)
+                model = genai.GenerativeModel(
+                    model_name=settings.GEMINI_MODEL,
+                    system_instruction=cls.CHAT_SYSTEM_PROMPT,
+                )
+                response = model.generate_content(prompt)
+                answer_text = response.text.strip()
+
+                return AdvisoryChatResponse(
+                    answer=answer_text,
+                    language=lang,
+                    context_used=context_used,
+                    context_snapshot=context,
+                )
+            except Exception as e:
+                logger.warning(f"Gemini chat API call failed ({e}), falling back to deterministic response.")
+
+        # 4. Deterministic fallback
+        fallback_answer = cls._generate_chat_fallback(question, lang, context)
+        return AdvisoryChatResponse(
+            answer=fallback_answer,
+            language=lang,
+            context_used=context_used,
+            context_snapshot=context,
+        )
+
+    @classmethod
+    def _build_chat_prompt(cls, question: str, lang_name: str, ctx: Any) -> str:
+        """Build a grounded prompt with all real backend data injected."""
+        return f"""User Question: "{question}"
+Respond in: {lang_name}
+
+=== GROUNDED BACKEND DATA (Source of Truth — Do NOT modify these numbers) ===
+
+BUSINESS PROFILE:
+- Business Category: {ctx.business_category}
+- Location: {ctx.village}, {ctx.district}, {ctx.state}
+
+FINANCIAL ANALYSIS (Calculated by Financial Engine):
+- Available Margin Capital: ₹{ctx.available_margin_capital:,.0f}
+- Total Feasible Project Cost: ₹{ctx.total_project_cost:,.0f}
+- Maximum Loan Amount: ₹{ctx.loan_amount:,.0f}
+- Selected Government Scheme: {ctx.selected_scheme}
+- Interest Rate: {ctx.interest_rate}% per annum
+- Monthly EMI: ₹{ctx.monthly_emi:,.0f}
+- Repayment Tenure: {ctx.repayment_tenure_months} months
+- Monthly Net Profit (after EMI): ₹{ctx.monthly_net_profit:,.0f}
+- DSCR (Debt Service Coverage Ratio): {ctx.dscr_ratio:.2f}
+- ROI: {ctx.roi_percentage:.1f}%
+- Break-Even Period: {ctx.break_even_months:.0f} months
+
+MARKET ANALYSIS (Calculated by Hyper-Local Market Engine):
+- Reachable Population: {ctx.reachable_population:,} people
+- Existing Competitors: {ctx.competitor_count}
+- Competition Level: {ctx.competition_level}
+- Market Saturation: {ctx.market_saturation_pct:.0f}%
+- Market Opportunity Score: {ctx.market_opportunity_score:.0f}/100
+
+OVERALL FEASIBILITY (Calculated by Unified Feasibility Engine):
+- Feasibility Score: {ctx.feasibility_score:.0f}/100
+- Classification: {ctx.feasibility_classification}
+
+STRENGTHS:
+{chr(10).join('- ' + s for s in ctx.financial_strengths)}
+
+OPPORTUNITIES:
+{chr(10).join('- ' + o for o in ctx.market_opportunities)}
+
+RISKS:
+{chr(10).join('- ' + r for r in ctx.financial_risks)}
+
+=== INSTRUCTIONS ===
+1. Answer the user's question using ONLY the data above.
+2. Cite specific numbers from the analysis when relevant.
+3. Provide practical, actionable advice for a rural micro-entrepreneur.
+4. If asked about data you don't have, say so clearly.
+5. Respond in {lang_name}.
+6. Keep the response concise (2-4 paragraphs).
+"""
+
+    @classmethod
+    def _generate_chat_fallback(cls, question: str, lang: str, ctx: Any) -> str:
+        """Generate a deterministic, grounded fallback when Gemini API is unavailable."""
+        cat = ctx.business_category.replace("_", " ").title()
+        loc = f"{ctx.village}, {ctx.district}"
+
+        if lang == "te":
+            return (
+                f"మీ {cat} వ్యాపారం {loc} లో ప్రారంభించడం గురించి విశ్లేషణ:\n\n"
+                f"మీ సాధ్యాసాధ్యాల స్కోరు {ctx.feasibility_score:.0f}/100 ({ctx.feasibility_classification}). "
+                f"మొత్తం ప్రాజెక్ట్ వ్యయం ₹{ctx.total_project_cost:,.0f}, "
+                f"దీనిలో ₹{ctx.available_margin_capital:,.0f} మీ మార్జిన్ మనీ. "
+                f"నెలవారీ EMI ₹{ctx.monthly_emi:,.0f} మరియు నికర లాభం ₹{ctx.monthly_net_profit:,.0f}. "
+                f"DSCR {ctx.dscr_ratio:.2f} (బ్యాంక్ సిఫార్సు >= 1.40).\n\n"
+                f"మార్కెట్‌లో {ctx.competitor_count} పోటీదారులు ఉన్నారు, "
+                f"సంతృప్తత {ctx.market_saturation_pct:.0f}%. "
+                f"మార్కెట్ అవకాశ స్కోరు {ctx.market_opportunity_score:.0f}/100.\n\n"
+                f"ప్రస్తుతం AI సేవ అందుబాటులో లేదు. మరింత వ్యక్తిగత సలహా కోసం తర్వాత ప్రయత్నించండి."
+            )
+        elif lang == "hi":
+            return (
+                f"आपके {cat} व्यवसाय का {loc} में विश्लेषण:\n\n"
+                f"आपकी व्यवहार्यता स्कोर {ctx.feasibility_score:.0f}/100 ({ctx.feasibility_classification}) है। "
+                f"कुल प्रोजेक्ट लागत ₹{ctx.total_project_cost:,.0f}, "
+                f"जिसमें आपकी मार्जिन मनी ₹{ctx.available_margin_capital:,.0f} है। "
+                f"मासिक EMI ₹{ctx.monthly_emi:,.0f} और शुद्ध लाभ ₹{ctx.monthly_net_profit:,.0f}। "
+                f"DSCR {ctx.dscr_ratio:.2f} (बैंक सिफारिश >= 1.40).\n\n"
+                f"बाजार में {ctx.competitor_count} प्रतिस्पर्धी हैं, "
+                f"संतृप्ति {ctx.market_saturation_pct:.0f}%। "
+                f"बाजार अवसर स्कोर {ctx.market_opportunity_score:.0f}/100.\n\n"
+                f"वर्तमान में AI सेवा उपलब्ध नहीं है। अधिक व्यक्तिगत सलाह के लिए बाद में प्रयास करें।"
+            )
+        else:
+            return (
+                f"Analysis of your {cat} business in {loc}:\n\n"
+                f"Your overall feasibility score is {ctx.feasibility_score:.0f}/100 ({ctx.feasibility_classification}). "
+                f"Total project cost is ₹{ctx.total_project_cost:,.0f}, "
+                f"with your margin contribution of ₹{ctx.available_margin_capital:,.0f}. "
+                f"Monthly EMI is ₹{ctx.monthly_emi:,.0f} and projected net profit is ₹{ctx.monthly_net_profit:,.0f}. "
+                f"DSCR is {ctx.dscr_ratio:.2f} (bank benchmark >= 1.40).\n\n"
+                f"There are {ctx.competitor_count} existing competitors in the area, "
+                f"with market saturation at {ctx.market_saturation_pct:.0f}%. "
+                f"Market opportunity score is {ctx.market_opportunity_score:.0f}/100.\n\n"
+                f"The AI advisory service is currently unavailable. "
+                f"The above data is from verified backend calculations. "
+                f"Please try again later for personalized AI-powered recommendations."
+            )
+
+

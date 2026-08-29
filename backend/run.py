@@ -8,6 +8,6 @@ if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 if __name__ == "__main__":
-    print("Starting RuralBiz AI Backend on http://127.0.0.1:8000 ...")
-    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)
+    print("Starting RuralBiz AI Backend on http://0.0.0.0:8000 (accessible on 127.0.0.1:8000 and 10.0.2.2:8000) ...")
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
 

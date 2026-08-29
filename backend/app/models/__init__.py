@@ -1,7 +1,16 @@
 from app.models.user import User, LanguageEnum, SocialCategoryEnum
 from app.models.business import BusinessSector, BusinessType
 from app.models.scheme import GovernmentScheme
-from app.models.market import District, SubDistrict, Village, MarketData
+from app.models.market import (
+    District,
+    SubDistrict,
+    Village,
+    MarketData,
+    BusinessCategoryBenchmark,
+    PopulationCache,
+    CompetitorCache,
+    MarketAnalysisRecord
+)
 from app.models.application import BusinessApplication, FinancialPlan, FeasibilityAssessment
 
 __all__ = [
@@ -15,8 +24,13 @@ __all__ = [
     "SubDistrict",
     "Village",
     "MarketData",
+    "BusinessCategoryBenchmark",
+    "PopulationCache",
+    "CompetitorCache",
+    "MarketAnalysisRecord",
     "BusinessApplication",
     "FinancialPlan",
     "FeasibilityAssessment",
 ]
+
 

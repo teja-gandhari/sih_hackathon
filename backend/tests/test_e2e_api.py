@@ -121,6 +121,54 @@ async def test_full_api_flow():
         res_rep = await client.get(f"/api/v1/analysis/{app_id}/report", headers=headers)
         rep = res_rep.json()
         print(f"\nConsolidated Bank Report Generated: {rep['report_title']} ({rep['report_id']})")
+
+        # 11. Test SIH Smart Financial Calculator & Scheme Router (/financial/smart-structure)
+        # Case 1: Margin ₹10,000 -> Micro Finance Scheme
+        r_c1 = await client.post("/api/v1/financial/smart-structure", json={"available_margin_capital": 10000.0})
+        assert r_c1.status_code == 200
+        d_c1 = r_c1.json()
+        assert d_c1["eligible"] is True
+        assert d_c1["total_feasible_project_cost"] == 100000.0
+        assert d_c1["maximum_loan_amount"] == 90000.0
+        assert d_c1["selected_scheme_tier"] == "Micro Finance Scheme"
+        assert d_c1["concessional_interest_rate_pct"] == 6.5
+        assert d_c1["loan_tenure_months"] == 36
+        assert d_c1["moratorium_months"] == 3
+
+        # Case 2: Margin ₹1,00,000 -> Term Loan Scheme (direct root endpoint alias test)
+        r_c2 = await client.post("/financial/smart-structure", json={"available_margin_capital": 100000.0})
+        assert r_c2.status_code == 200
+        d_c2 = r_c2.json()
+        assert d_c2["eligible"] is True
+        assert d_c2["total_feasible_project_cost"] == 1000000.0
+        assert d_c2["maximum_loan_amount"] == 900000.0
+        assert d_c2["selected_scheme_tier"] == "Term Loan Scheme"
+        assert d_c2["concessional_interest_rate_pct"] == 8.0
+        assert d_c2["loan_tenure_months"] == 84
+        assert d_c2["moratorium_months"] == 6
+
+        # Case 3: Margin ₹5,00,000 -> Boundary Term Loan Scheme
+        r_c3 = await client.post("/api/v1/financial/smart-structure", json={"available_margin_capital": 500000.0})
+        assert r_c3.status_code == 200
+        d_c3 = r_c3.json()
+        assert d_c3["eligible"] is True
+        assert d_c3["total_feasible_project_cost"] == 5000000.0
+        assert d_c3["maximum_loan_amount"] == 4500000.0
+        assert d_c3["selected_scheme_tier"] == "Term Loan Scheme"
+
+        # Case 4: Margin ₹6,00,000 -> Ineligible
+        r_c4 = await client.post("/api/v1/financial/smart-structure", json={"available_margin_capital": 600000.0})
+        assert r_c4.status_code == 200
+        d_c4 = r_c4.json()
+        assert d_c4["eligible"] is False
+        assert d_c4["selected_scheme_tier"] is None
+        assert d_c4["maximum_loan_amount"] is None
+        assert "exceeds" in d_c4["ineligibility_reason"].lower()
+
+        # Validation: Margin <= 0 returns 422 Unprocessable Entity
+        r_val = await client.post("/api/v1/financial/smart-structure", json={"available_margin_capital": 0})
+        assert r_val.status_code == 422
+
         print("\n=======================================================")
         print(" SUCCESS: All RuralBiz AI backend modules working 100%! ")
         print("=======================================================")
@@ -129,4 +177,5 @@ async def test_full_api_flow():
 if __name__ == "__main__":
     import asyncio
     asyncio.run(test_full_api_flow())
+
 

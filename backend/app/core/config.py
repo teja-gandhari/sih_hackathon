@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     # Gemini API Key
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     GEMINI_MODEL: str = "gemini-2.0-flash"
+
+    # Google Maps / Places API (Optional for live competitor lookup)
+    GOOGLE_MAPS_API_KEY: str = os.getenv("GOOGLE_MAPS_API_KEY", "")
+    GOOGLE_PLACES_API_KEY: str = os.getenv("GOOGLE_PLACES_API_KEY", "")
     
     # Vernacular Language Support
     DEFAULT_LANGUAGE: str = "te"  # te: Telugu, hi: Hindi, en: English

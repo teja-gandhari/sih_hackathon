@@ -162,3 +162,62 @@ async def query_voice_advisor(
         language_hint=language_hint or current_user.preferred_language.value
     )
 
+
+@router.post("/chat")
+async def chat_with_ai_advisor(
+    request: "AdvisoryChatRequest",
+    db: AsyncSession = Depends(get_db)
+) -> Any:
+    """
+    AI Business Advisor Chat Endpoint.
+    
+    Accepts a user question about their business and returns a grounded AI response
+    based on real Financial Engine, Market Engine, and Feasibility Engine data.
+    
+    Supports:
+    - en (English)
+    - te (Telugu తెలుగు)
+    - hi (Hindi हिंदी)
+    
+    The AI advisor:
+    - Uses ONLY backend-calculated data (never invents numbers)
+    - Explains and advises based on the actual feasibility analysis
+    - Falls back to deterministic grounded responses if AI API is unavailable
+    """
+    from app.schemas.feasibility import AdvisoryChatRequest as ChatReq
+    # Validate request type
+    if not isinstance(request, ChatReq):
+        request = ChatReq(**request.model_dump() if hasattr(request, "model_dump") else request)
+    
+    return await GeminiAIService.generate_chat_advisory(
+        db=db,
+        request=request,
+    )
+
+
+@router.get("/context/{application_id}")
+async def get_advisory_context(
+    application_id: str,
+    db: AsyncSession = Depends(get_db)
+) -> Any:
+    """
+    Returns the structured context that would be provided to the AI advisor.
+    
+    The frontend can inspect this to see exactly what data the AI receives.
+    No AI is called — this is purely the grounded backend data.
+    """
+    from app.schemas.feasibility import AdvisoryChatRequest
+    
+    # Build a minimal request from the application_id
+    req = AdvisoryChatRequest(
+        application_id=application_id,
+        question="context-only",
+        language="en"
+    )
+    context = await GeminiAIService.build_advisory_context(db=db, request=req)
+    return context
+
+
+# Import the chat request schema at module level for FastAPI to resolve
+from app.schemas.feasibility import AdvisoryChatRequest  # noqa: E402
+

@@ -1,8 +1,12 @@
 import uuid
-from datetime import datetime
-from sqlalchemy import Column, String, Float, Integer, JSON, DateTime, ForeignKey
+from datetime import datetime, timezone
+from sqlalchemy import Column, String, Float, Integer, JSON, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from app.core.database import Base
+
+
+def utcnow():
+    return datetime.now(timezone.utc)
 
 
 class District(Base):
@@ -12,6 +16,9 @@ class District(Base):
     state_name = Column(String(100), nullable=False)
     district_name = Column(String(100), unique=True, index=True, nullable=False)
     state_code = Column(String(10), default="IN-TG")
+    population = Column(Integer, nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
 
     # Relationships
     sub_districts = relationship("SubDistrict", back_populates="district", cascade="all, delete-orphan")
@@ -24,6 +31,9 @@ class SubDistrict(Base):
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     district_id = Column(String(36), ForeignKey("districts.id"), nullable=False, index=True)
     sub_district_name = Column(String(100), nullable=False, index=True)  # Block / Mandal / Taluk
+    population = Column(Integer, nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
 
     # Relationships
     district = relationship("District", back_populates="sub_districts")
@@ -38,6 +48,9 @@ class Village(Base):
     sub_district_id = Column(String(36), ForeignKey("sub_districts.id"), nullable=False, index=True)
     village_name = Column(String(100), nullable=False, index=True)
     pincode = Column(String(10), nullable=True)
+    population = Column(Integer, nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
 
     # Relationships
     sub_district = relationship("SubDistrict", back_populates="villages")
@@ -78,10 +91,92 @@ class MarketData(Base):
     data_confidence_level = Column(String(30), default="moderate_proxy")  # high_verified, moderate_proxy, estimated
     
     notes = Column(String(500), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
     # Relationships
     district = relationship("District", back_populates="market_data")
     sub_district = relationship("SubDistrict", back_populates="market_data")
+
+
+class BusinessCategoryBenchmark(Base):
+    __tablename__ = "business_market_benchmarks"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    category_code = Column(String(50), unique=True, index=True, nullable=False)  # kirana, dairy, food_processing, etc.
+    category_name = Column(String(100), nullable=False)
+    
+    # Configurable population benchmarks
+    minimum_population_per_business = Column(Float, default=600.0)
+    ideal_population_per_business = Column(Float, default=1000.0)
+    
+    # OSM Overpass search tags & keywords
+    osm_tags = Column(JSON, default=lambda: ["convenience", "supermarket", "general", "grocery", "shop"])
+    
+    # Scoring weights
+    competition_weight = Column(Float, default=0.35)
+    demand_weight = Column(Float, default=0.35)
+    reach_weight = Column(Float, default=0.20)
+    market_reach_weight = Column(Float, default=0.10)
+    default_radius_km = Column(Float, default=5.0)
+    description = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+
+
+class PopulationCache(Base):
+    __tablename__ = "population_cache"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    location_key = Column(String(150), unique=True, index=True, nullable=False)  # village_a:nalgonda:telangana
+    village_name = Column(String(100), index=True, nullable=False)
+    block_name = Column(String(100), nullable=True)
+    district_name = Column(String(100), index=True, nullable=False)
+    state_name = Column(String(100), default="Telangana")
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    
+    village_population = Column(Integer, nullable=False)
+    reachable_population_5km = Column(Integer, nullable=False)
+    reachable_population_10km = Column(Integer, nullable=False)
+    
+    population_source = Column(String(100), default="Census 2011 / Open Data Portal")
+    is_estimated = Column(Boolean, default=False)
+    retrieved_at = Column(DateTime, default=utcnow)
+    expires_at = Column(DateTime, nullable=True)
+
+
+class CompetitorCache(Base):
+    __tablename__ = "competitor_cache"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    cache_key = Column(String(150), unique=True, index=True, nullable=False)  # kirana:17.05:79.27:5.0
+    business_category = Column(String(50), index=True, nullable=False)
+    latitude = Column(Float, nullable=False)
+    longitude = Column(Float, nullable=False)
+    radius_km = Column(Float, default=5.0)
+    
+    competitor_count = Column(Integer, default=0)
+    competitor_names = Column(JSON, default=list)
+    source = Column(String(100), default="OpenStreetMap Overpass API")
+    retrieved_at = Column(DateTime, default=utcnow)
+    expires_at = Column(DateTime, nullable=True)
+
+
+class MarketAnalysisRecord(Base):
+    __tablename__ = "market_analysis_records"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), nullable=True, index=True)
+    village_name = Column(String(100), nullable=False)
+    district_name = Column(String(100), nullable=False)
+    business_category = Column(String(50), nullable=False)
+    radius_km = Column(Float, default=5.0)
+    
+    market_opportunity_score = Column(Float, nullable=False)
+    market_potential = Column(String(50), nullable=False)  # HIGH_OPPORTUNITY, MODERATE_OPPORTUNITY, etc.
+    market_saturation_percentage = Column(Float, nullable=False)
+    recommendation_level = Column(String(50), nullable=False)  # PROCEED, REVIEW, HIGH_RISK
+    full_analysis_json = Column(JSON, nullable=False)
+    created_at = Column(DateTime, default=utcnow)
+
 
